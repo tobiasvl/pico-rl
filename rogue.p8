@@ -18,6 +18,10 @@ function _init()
  name=nil
  level=1
  gold=0
+ radio=0
+
+ seed=rnd(-1)
+ srand(seed)
 
  mobs={}
  player=mob:new{
@@ -265,11 +269,8 @@ function game_update()
    m:move(move)
   end
  end
- if move==0x10 then
-   cam.x-=8
- elseif move==0x20 then
-   cam.y-=8
- end
+
+ radio+=0.05
 
  --scroll
  if (player.x+cam.x/w>13) cam.x-=w
@@ -281,6 +282,7 @@ end
 --draw
 function _draw()
  draw()
+ print(sub(tostr(seed,true),3),0,0,3)
 end
 
 function title_draw()
@@ -346,6 +348,8 @@ end
 
 function drawhud()
  local x,y=0,128-h
+ rectfill(x,y-2,radio,y-2,11)
+ rectfill(radio+1,y-2,128,y-2,0)
  rectfill(x,y-1,128,128,0)
 
  local hud={
