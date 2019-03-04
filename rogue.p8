@@ -53,7 +53,7 @@ function _init()
   }))
  end
 
- cam={x=-player.x*w+64,y=-player.y*h+64}
+ cam={x=-player.x*w+64,y=-player.y*h+60}
 
  dirs={
   {-1,0},
@@ -151,7 +151,7 @@ function gendun_rogue(w, h, gw, gh)
   for y=1,gh do
     for x=1,gw do
       if not grid[y][x].connected then
-        printh("STILL UNCONNECTED: "..x..","..y)
+        printh("still unconnected: "..x..","..y)
       end
     end
   end
@@ -265,12 +265,11 @@ function game_update()
  local move=btnp()
  if move>0 and move<15 then
   t+=1
+  radio+=0.05
   for m in all(mobs) do
    m:move(move)
   end
  end
-
- radio+=0.05
 
  --scroll
  if (player.x+cam.x/w>13) cam.x-=w
