@@ -33,7 +33,7 @@ function _init()
   move=function(self,move)
    local x=self.x+dirs[move][1]
    local y=self.y+dirs[move][2]
-   if x>0 and x<=dungeon._width and y>0 and y<=dungeon._height then--and dungeon.map[x][y]!=1 then
+   if x>0 and x<=dungeon._width and y>0 and y<=dungeon._height and dungeon.map[x][y]!=1 then
     self.x,self.y=x,y
    end
   end
@@ -42,15 +42,20 @@ function _init()
 
  generate_dungeon=gendun_rogue
  dungeon=generate_dungeon(50,50,4,4)
+ fogmap=generate_fogmap(dungeon.map)
 
  --generate dummy mobs
  for _=1,7 do
-  add(mobs,mob:new({
-   c="😐",
-   hp=1,
-   x=flr(rnd(dungeon._width)),
-   y=flr(rnd(dungeon._height))
-  }))
+   local x,y
+   repeat
+     x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
+   until dungeon.map[x][y]==0
+   add(mobs,mob:new({
+     c="😐",
+     hp=1,
+     x=x,
+     y=y
+   }))
  end
 
  cam={x=-player.x*w+64,y=-player.y*h+60}
@@ -69,9 +74,23 @@ function _init()
 end
 -->8
 --generate dungeon
+
 function gendun_rogue(w, h, gw, gh)
   -- https://web.archive.org/web/20130510010345/http://kuoi.com/~kamikaze/gamedesign/art07_rogue_dungeon.php
   local map={}
+  local grid={}
+  local rooms={}
+  local unconnected={}
+
+  function connect_rooms(r1,r2)
+    add(r1.connected_neighbors,r2)
+    add(r2.connected_neighbors,r1)
+    r1.connected=true
+    r2.connected=true
+    del(unconnected,r1)
+    del(unconnected,r2)
+  end
+
   for x=1,w do
     local col=add(map,{})
     for y=1,h do
@@ -79,11 +98,12 @@ function gendun_rogue(w, h, gw, gh)
     end
   end
   --1 2
-  local grid={}
   for y=1,gh do
     local col=add(grid,{})
     for x=1,gw do
-      add(col,{connected=false,neighbors={},connected_neighbors={}})
+      local room=add(col,{connected=false,neighbors={},connected_neighbors={},gx=x,gy=y})
+      add(rooms,room)
+      add(unconnected,room)
     end
   end
 
@@ -106,17 +126,14 @@ function gendun_rogue(w, h, gw, gh)
   local gx=flr(rnd(#grid[1]))+1
   local room=grid[gy][gx]
   room.connected=true
+  del(unconnected,room)
   local start=room
-  printh("starting with "..gx..","..gy)
 
   --4
   ::continue::
   for n in all(room.neighbors) do
     if not n.connected then
-      add(room.connected_neighbors,n)
-      add(n.connected_neighbors,room)
-      room.connected=true
-      n.connected=true
+      connect_rooms(room,n)
       room=n
       goto continue
     end
@@ -124,39 +141,39 @@ function gendun_rogue(w, h, gw, gh)
 
   --5
   local goal
-  do
-    local room
-    for y=1,gh do
-      for x=1,gw do
-        room=grid[y][x]
-        if not room.connected then
-          for n in all(room.neighbors) do
-            printh("unconnected, attempting to connect "..x..","..y)
-            if n.connected then
-              add(room.connected_neighbors,n)
-              add(n.connected_neighbors,room)
-              room.connected=true
-              n.connected=true
-              printh("connected")
-              break
-            end
-          end
+  -- this is not very efficient
+  while #unconnected>0 do
+    for room in all(unconnected) do
+      for n in all(room.neighbors) do
+        if n.connected then
+          connect_rooms(room,n)
+          break
         end
       end
     end
-    goal=room
   end
+  goal=room
 
   --6
-  for y=1,gh do
-    for x=1,gw do
-      if not grid[y][x].connected then
-        printh("still unconnected: "..x..","..y)
-      end
-    end
+  assert(#unconnected==0)
+  for room in all(rooms) do
+    assert(room.connected)
   end
 
   --7
+  for _=0,flr(rnd(gw)) do
+    local room=rooms[ceil(rnd(#rooms))]
+    for n in all(room.neighbors) do
+      for n2 in all(room.connected_neighbors) do
+        if n==n2 then
+          goto next_room
+        end
+      end
+      connect_rooms(room,n)
+      break
+      ::next_room::
+    end
+  end
 
   --8 carve
   for y=1,gh do
@@ -179,8 +196,8 @@ function gendun_rogue(w, h, gw, gh)
     for x=1,gw do
       local room=grid[y][x]
       for n in all(room.connected_neighbors) do
-        local start={x=room.start_x+(room.end_x-room.start_x)/2,y=room.start_y+(room.end_y-room.start_y)/2}
-        local goal={x=n.start_x+(n.end_x-n.start_x)/2,y=n.start_y+(n.end_y-n.start_y)/2}
+        local start={x=room.start_x+flr((room.end_x-room.start_x)/2),y=room.start_y+flr((room.end_y-room.start_y)/2)}
+        local goal={x=n.start_x+flr((n.end_x-n.start_x)/2),y=n.start_y+flr((n.end_y-n.start_y)/2)}
         --start={x=flr(rnd(room.end_x-room.start_x))+room.start_x+1,y=flr(rnd(room.end_y-room.start_y))+room.start_y+1}
         --goal={x=flr(rnd(n.end_x-n.start_x))+n.start_x+1,y=flr(rnd(n.end_y-n.start_y))+n.start_y+1}
         local dir_x=sgn(goal.x-start.x)
@@ -228,10 +245,57 @@ function gendun_rogue(w, h, gw, gh)
   dungeon._height=h
   dungeon.map=map
   dungeon.grid=grid
+  dungeon.rooms=rooms
   dungeon._doors={}
+  dungeon.start=start
   return dungeon
 end
 
+function generate_fogmap(map)
+  local fogmap={}
+  for x=1,#map do
+    add(fogmap,{})
+    for y=1,#map[1] do
+      add(fogmap[i],0)
+    end
+  end
+  return fogmap
+end
+
+function coords_to_room(x,y)
+  for room in all(dungeon.rooms) do
+    if x>=room.start_x and x<=room.end_x and y>=room.start_y and y<=room.end_y then
+      return room
+    end
+  end
+end
+
+function unfogroom(room)
+  if dungeon.map[player.x][player.y]==2 then
+    for dir in all(dirs) do --eight or four?
+      local x,y=player.x+dir[1],player.y+dir[2]
+      if dungeon.map[x][y]==2 or dungeon.map[x][y]==0 then
+        fogmap[x][y]=1
+      end
+    end
+    return
+  end
+  for x=room.start_x-1,room.end_x+1 do
+    for y=room.start_y-1,room.end_y+1 do
+      fogmap[x][y]=1
+    end
+  end
+end
+
+function fogdungeon()
+  for x=1,#dungeon.map do
+    for y=1,#dungeon.map[1] do
+      if fogmap[x][y]==1 then
+        fogmap[x][y]=2
+      end
+    end
+  end
+end
 -->8
 --update
 function _update()
@@ -319,18 +383,27 @@ function game_draw()
  end
 ]]
 
+ fogdungeon()
+ unfogroom(coords_to_room(player.x,player.y))
+
  for x=1,dungeon._width do
   for y=1,dungeon._height do
-   local item=dungeon.map[x][y]
-   if item==1 then
-    print("█",x*w+cam.x,y*h+cam.y,6)
-   elseif item==2 then
-    print("▒",x*w+cam.x,y*h+cam.y,6)
-  elseif item==3 then
-    print("▤",x*w+cam.x,y*h+cam.y,6)
-   else
-    print(".",x*w+cam.x+2,y*h+cam.y-2,5)
-   end
+    local c=6
+    if fogmap[x][y]==2 then
+      c=5
+    end
+    if fogmap[x][y]==1 or fogmap[x][y]==2 then
+     local item=dungeon.map[x][y]
+     if item==1 then
+      print("█",x*w+cam.x,y*h+cam.y,c)
+     elseif item==2 then
+      print("▒",x*w+cam.x,y*h+cam.y,c)
+    elseif item==3 then
+      print("▤",x*w+cam.x,y*h+cam.y,c)
+     else
+      if (fogmap[x][y]==1) print(".",x*w+cam.x+2,y*h+cam.y-2,5)
+     end
+    end
   end
  end
 
@@ -339,7 +412,9 @@ function game_draw()
  end
 
  for m in all(mobs) do
-  print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
+  if fogmap[m.x][m.y]==1 then
+    print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
+  end
  end
 
  drawhud()
