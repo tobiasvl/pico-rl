@@ -46,16 +46,16 @@ function _init()
 
  --generate dummy mobs
  for _=1,7 do
-   local x,y
-   repeat
-     x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
-   until dungeon.map[x][y]==0
-   add(mobs,mob:new({
-     c="😐",
-     hp=1,
-     x=x,
-     y=y
-   }))
+  local x,y
+  repeat
+   x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
+  until dungeon.map[x][y]==0
+  add(mobs,mob:new({
+   c="😐",
+   hp=1,
+   x=x,
+   y=y
+  }))
  end
 
  cam={x=-player.x*w+64,y=-player.y*h+60}
@@ -71,230 +71,228 @@ function _init()
   {0,1},
   {-1,1},
   {1,1}}
-end
--->8
---generate dungeon
+ end
+ -->8
+ --generate dungeon
 
-function gendun_rogue(w, h, gw, gh)
-  -- https://web.archive.org/web/20130510010345/http://kuoi.com/~kamikaze/gamedesign/art07_rogue_dungeon.php
-  local map={}
-  local grid={}
-  local rooms={}
-  local unconnected={}
+ function gendun_rogue(w, h, gw, gh)
+ -- https://web.archive.org/web/20130510010345/http://kuoi.com/~kamikaze/gamedesign/art07_rogue_dungeon.php
+ local map={}
+ local grid={}
+ local rooms={}
+ local unconnected={}
 
-  function connect_rooms(r1,r2)
-    add(r1.connected_neighbors,r2)
-    add(r2.connected_neighbors,r1)
-    r1.connected=true
-    r2.connected=true
-    del(unconnected,r1)
-    del(unconnected,r2)
+ function connect_rooms(r1,r2)
+  add(r1.connected_neighbors,r2)
+  add(r2.connected_neighbors,r1)
+  r1.connected=true
+  r2.connected=true
+  del(unconnected,r1)
+  del(unconnected,r2)
+ end
+
+ for x=1,w do
+  local col=add(map,{})
+  for y=1,h do
+   add(col,1)
   end
+ end
+ --1 2
+ for y=1,gh do
+  local col=add(grid,{})
+  for x=1,gw do
+   local room=add(col,{connected=false,neighbors={},connected_neighbors={},gx=x,gy=y})
+   add(rooms,room)
+   add(unconnected,room)
+  end
+ end
 
-  for x=1,w do
-    local col=add(map,{})
-    for y=1,h do
-      add(col,1)
+ for y=1,gh do
+  for x=1,gw do
+   local room=grid[y][x]
+   for i in all(four) do
+    local ny=y+i[2]
+    local nx=x+i[1]
+    if ny>0 and ny<=gh and nx>0 and nx<=gw then
+     add(room.neighbors,grid[ny][nx])
     end
+   end
+   room.neighbors=shuffle(room.neighbors)
   end
-  --1 2
-  for y=1,gh do
-    local col=add(grid,{})
-    for x=1,gw do
-      local room=add(col,{connected=false,neighbors={},connected_neighbors={},gx=x,gy=y})
-      add(rooms,room)
-      add(unconnected,room)
+ end
+
+ --3
+ local room=rooms[ceil(rnd(#rooms))]
+ room.connected=true
+ del(unconnected,room)
+ local start=room
+
+ --4
+ ::continue::
+ for n in all(room.neighbors) do
+  if not n.connected then
+   connect_rooms(room,n)
+   room=n
+   goto continue
+  end
+ end
+
+ --5
+ local goal
+ -- this is not very efficient
+ while #unconnected>0 do
+  for room in all(unconnected) do
+   for n in all(room.neighbors) do
+    if n.connected then
+     connect_rooms(room,n)
+     break
     end
+   end
   end
+ end
+ goal=room
 
-  for y=1,gh do
-    for x=1,gw do
-      local room=grid[y][x]
-      for i in all(four) do
-        local ny=y+i[2]
-        local nx=x+i[1]
-        if ny>0 and ny<=gh and nx>0 and nx<=gw then
-          add(room.neighbors,grid[ny][nx])
-        end
-      end
-      room.neighbors=shuffle(room.neighbors)
-    end
-  end
+ --6
+ assert(#unconnected==0)
+ for room in all(rooms) do
+  assert(room.connected)
+ end
 
-  --3
-  local gy=flr(rnd(#grid))+1
-  local gx=flr(rnd(#grid[1]))+1
-  local room=grid[gy][gx]
-  room.connected=true
-  del(unconnected,room)
-  local start=room
-
-  --4
-  ::continue::
+ --7
+ for _=0,flr(rnd(gw)) do
+  local room=rooms[ceil(rnd(#rooms))]
   for n in all(room.neighbors) do
-    if not n.connected then
-      connect_rooms(room,n)
-      room=n
-      goto continue
+   for n2 in all(room.connected_neighbors) do
+    if n==n2 then
+     goto next_room
     end
+   end
+   connect_rooms(room,n)
+   break
+   ::next_room::
   end
+ end
 
-  --5
-  local goal
-  -- this is not very efficient
-  while #unconnected>0 do
-    for room in all(unconnected) do
-      for n in all(room.neighbors) do
-        if n.connected then
-          connect_rooms(room,n)
-          break
-        end
-      end
+ --8 carve
+ for y=1,gh do
+  for x=1,gw do
+   local room=grid[y][x]
+   local r=flr(rnd(3))
+   room.start_y=(y-1)*flr(h/gh)+2+r
+   room.end_y=y*flr(h/gh)-r
+   room.start_x=(x-1)*flr(w/gw)+2+r
+   room.end_x=x*flr(w/gw)-r
+   for yy=room.start_y,room.end_y do
+    for xx=room.start_x,room.end_x do
+     map[xx][yy]=0
     end
+   end
   end
-  goal=room
+ end
+ -- carve corridors
+ for y=1,gh do
+  for x=1,gw do
+   local room=grid[y][x]
+   for n in all(room.connected_neighbors) do
+    local start={x=room.start_x+flr((room.end_x-room.start_x)/2),y=room.start_y+flr((room.end_y-room.start_y)/2)}
+    local goal={x=n.start_x+flr((n.end_x-n.start_x)/2),y=n.start_y+flr((n.end_y-n.start_y)/2)}
+    --start={x=flr(rnd(room.end_x-room.start_x))+room.start_x+1,y=flr(rnd(room.end_y-room.start_y))+room.start_y+1}
+    --goal={x=flr(rnd(n.end_x-n.start_x))+n.start_x+1,y=flr(rnd(n.end_y-n.start_y))+n.start_y+1}
+    local dir_x=sgn(goal.x-start.x)
+    local dir_y=sgn(goal.y-start.y)
 
-  --6
-  assert(#unconnected==0)
-  for room in all(rooms) do
-    assert(room.connected)
-  end
-
-  --7
-  for _=0,flr(rnd(gw)) do
-    local room=rooms[ceil(rnd(#rooms))]
-    for n in all(room.neighbors) do
-      for n2 in all(room.connected_neighbors) do
-        if n==n2 then
-          goto next_room
-        end
-      end
-      connect_rooms(room,n)
-      break
-      ::next_room::
+    --local yy=start.y
+    --for xx=start.x,goal.x,dir_x do
+    --  if (map[xx][yy]==1) map[xx][yy]=2
+    --  map[xx][yy]=2
+    --end
+    --local xx=start.x
+    --for yy=start.y,goal.y,dir_y do
+    --  if (map[xx][yy]==1) map[xx][yy]=2
+    --  map[xx][yy]=2
+    --end
+    -- change to pathfinding
+    for xx=start.x,goal.x,dir_x do
+     for yy=start.y,goal.y,dir_y do
+      if (map[xx][yy]==1) map[xx][yy]=2
+     end
     end
+   end
   end
+ end
 
-  --8 carve
-  for y=1,gh do
-    for x=1,gw do
-      local room=grid[y][x]
-      local r=flr(rnd(3))
-      room.start_y=(y-1)*flr(h/gh)+2+r
-      room.end_y=y*flr(h/gh)-r
-      room.start_x=(x-1)*flr(w/gw)+2+r
-      room.end_x=x*flr(w/gw)-r
-      for yy=room.start_y,room.end_y do
-        for xx=room.start_x,room.end_x do
-          map[xx][yy]=0
-        end
-      end
-    end
-  end
-  -- carve corridors
-  for y=1,gh do
-    for x=1,gw do
-      local room=grid[y][x]
-      for n in all(room.connected_neighbors) do
-        local start={x=room.start_x+flr((room.end_x-room.start_x)/2),y=room.start_y+flr((room.end_y-room.start_y)/2)}
-        local goal={x=n.start_x+flr((n.end_x-n.start_x)/2),y=n.start_y+flr((n.end_y-n.start_y)/2)}
-        --start={x=flr(rnd(room.end_x-room.start_x))+room.start_x+1,y=flr(rnd(room.end_y-room.start_y))+room.start_y+1}
-        --goal={x=flr(rnd(n.end_x-n.start_x))+n.start_x+1,y=flr(rnd(n.end_y-n.start_y))+n.start_y+1}
-        local dir_x=sgn(goal.x-start.x)
-        local dir_y=sgn(goal.y-start.y)
+ --9 doors
 
-        --local yy=start.y
-        --for xx=start.x,goal.x,dir_x do
-        --  if (map[xx][yy]==1) map[xx][yy]=2
-        --  map[xx][yy]=2
-        --end
-        --local xx=start.x
-        --for yy=start.y,goal.y,dir_y do
-        --  if (map[xx][yy]==1) map[xx][yy]=2
-        --  map[xx][yy]=2
-        --end
-        -- change to pathfinding
-        for xx=start.x,goal.x,dir_x do
-          for yy=start.y,goal.y,dir_y do
-            if (map[xx][yy]==1) map[xx][yy]=2
-          end
-        end
-      end
-    end
-  end
+ --10 stairs
+ assert(start!=goal)
+ do
+  local x=flr(rnd(start.end_x-start.start_x)+start.start_x)+1
+  local y=flr(rnd(start.end_y-start.start_y)+start.start_y)+1
+  map[x][y]=3
+  player.x=x
+  player.y=y
+ end
+ do
+  local x=flr(rnd(goal.end_x-goal.start_x)+goal.start_x)+1
+  local y=flr(rnd(goal.end_y-goal.start_y)+goal.start_y)+1
+  map[x][y]=3
+ end
 
-  --9 doors
-
-  --10 stairs
-  assert(start!=goal)
-  do
-    local x=flr(rnd(start.end_x-start.start_x)+start.start_x)+1
-    local y=flr(rnd(start.end_y-start.start_y)+start.start_y)+1
-    map[x][y]=3
-    player.x=x
-    player.y=y
-  end
-  do
-    local x=flr(rnd(goal.end_x-goal.start_x)+goal.start_x)+1
-    local y=flr(rnd(goal.end_y-goal.start_y)+goal.start_y)+1
-    map[x][y]=3
-  end
-
-  local dungeon={}
-  dungeon._width=w
-  dungeon._height=h
-  dungeon.map=map
-  dungeon.grid=grid
-  dungeon.rooms=rooms
-  dungeon._doors={}
-  dungeon.start=start
-  return dungeon
+ local dungeon={}
+ dungeon._width=w
+ dungeon._height=h
+ dungeon.map=map
+ dungeon.grid=grid
+ dungeon.rooms=rooms
+ --dungeon._doors={}
+ dungeon.start=start
+ return dungeon
 end
 
 function generate_fogmap(map)
-  local fogmap={}
-  for x=1,#map do
-    add(fogmap,{})
-    for y=1,#map[1] do
-      add(fogmap[i],0)
-    end
+ local fogmap={}
+ for x=1,#map do
+  add(fogmap,{})
+  for y=1,#map[1] do
+   add(fogmap[i],0)
   end
-  return fogmap
+ end
+ return fogmap
 end
 
 function coords_to_room(x,y)
-  for room in all(dungeon.rooms) do
-    if x>=room.start_x and x<=room.end_x and y>=room.start_y and y<=room.end_y then
-      return room
-    end
+ for room in all(dungeon.rooms) do
+  if x>=room.start_x and x<=room.end_x and y>=room.start_y and y<=room.end_y then
+   return room
   end
+ end
 end
 
 function unfogroom(room)
-  if dungeon.map[player.x][player.y]==2 then
-    for dir in all(dirs) do --eight or four?
-      local x,y=player.x+dir[1],player.y+dir[2]
-      if dungeon.map[x][y]==2 or dungeon.map[x][y]==0 then
-        fogmap[x][y]=1
-      end
-    end
-    return
+ if dungeon.map[player.x][player.y]==2 then
+  for dir in all(dirs) do --eight or four?
+   local x,y=player.x+dir[1],player.y+dir[2]
+   if dungeon.map[x][y]==2 or dungeon.map[x][y]==0 then
+    fogmap[x][y]=1
+   end
   end
-  for x=room.start_x-1,room.end_x+1 do
-    for y=room.start_y-1,room.end_y+1 do
-      fogmap[x][y]=1
-    end
+  return
+ end
+ for x=room.start_x-1,room.end_x+1 do
+  for y=room.start_y-1,room.end_y+1 do
+   fogmap[x][y]=1
   end
+ end
 end
 
 function fogdungeon()
-  for x=1,#dungeon.map do
-    for y=1,#dungeon.map[1] do
-      if fogmap[x][y]==1 then
-        fogmap[x][y]=2
-      end
-    end
+ for x=1,#dungeon.map do
+  for y=1,#dungeon.map[1] do
+   if fogmap[x][y]==1 then
+    fogmap[x][y]=2
+   end
   end
+ end
 end
 -->8
 --update
@@ -361,7 +359,7 @@ function title_draw()
   print("∧ ∧",70,20,10)
   print([[   _
   | |
- /___\]],67,26,12)
+  /___\]],67,26,12)
   print("◆",77,25,8)
   print("웃",77,32,9)
  end
@@ -377,47 +375,44 @@ end
 function game_draw()
  cls()
 
---[[
+ --[[
  for coords,item in pairs(dungeon) do
-  print(item,coords[1]*w+cam.x,coords[2]*h+cam.y,6)
- end
+ print(item,coords[1]*w+cam.x,coords[2]*h+cam.y,6)
+end
 ]]
 
- fogdungeon()
- unfogroom(coords_to_room(player.x,player.y))
+fogdungeon()
+unfogroom(coords_to_room(player.x,player.y))
 
- for x=1,dungeon._width do
-  for y=1,dungeon._height do
-    local c=6
-    if fogmap[x][y]==2 then
-      c=5
-    end
-    if fogmap[x][y]==1 or fogmap[x][y]==2 then
-     local item=dungeon.map[x][y]
-     if item==1 then
-      print("█",x*w+cam.x,y*h+cam.y,c)
-     elseif item==2 then
-      print("▒",x*w+cam.x,y*h+cam.y,c)
-    elseif item==3 then
-      print("▤",x*w+cam.x,y*h+cam.y,c)
-     else
-      if (fogmap[x][y]==1) print(".",x*w+cam.x+2,y*h+cam.y-2,5)
-     end
-    end
+for x=1,dungeon._width do
+ for y=1,dungeon._height do
+  local c=6
+  if fogmap[x][y]==2 then
+   c=5
+  end
+  if fogmap[x][y]==1 or fogmap[x][y]==2 then
+   local parts={"█","▒","▤"}
+   local part=parts[dungeon.map[x][y]]
+   if part then
+    print(part,x*w+cam.x,y*h+cam.y,c)
+   else
+    if (fogmap[x][y]==1) print(".",x*w+cam.x+2,y*h+cam.y-2,5)
+   end
   end
  end
+end
 
- for d in all(dungeon._doors) do
-   print("++",d.x*w+cam.x,d.y*h+cam.y)
+--for d in all(dungeon._doors) do
+-- print("++",d.x*w+cam.x,d.y*h+cam.y)
+--end
+
+for m in all(mobs) do
+ if fogmap[m.x][m.y]==1 then
+  print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
  end
+end
 
- for m in all(mobs) do
-  if fogmap[m.x][m.y]==1 then
-    print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
-  end
- end
-
- drawhud()
+drawhud()
 end
 
 function drawhud()
@@ -446,34 +441,34 @@ end
 --tools
 
 function getrandomint(min, max)
-    min=min and min or 0
-    max=max and max or 1
-    return flr(rnd(max))+min
+ min=min and min or 0
+ max=max and max or 1
+ return flr(rnd(max))+min
 end
 
 function shuffle(t)
-  for n=1,#t*2 do -- #t*2 times seems enough
-    local a,b=flr(1+rnd(#t)),flr(1+rnd(#t))
-    t[a],t[b]=t[b],t[a]
-  end
-  return t
+ for n=1,#t*2 do -- #t*2 times seems enough
+  local a,b=flr(1+rnd(#t)),flr(1+rnd(#t))
+  t[a],t[b]=t[b],t[a]
+ end
+ return t
 end
 four={
-                { 0,-1},
-                { 1, 0},
-                { 0, 1},
-                {-1, 0}
-               }
+ { 0,-1},
+ { 1, 0},
+ { 0, 1},
+ {-1, 0}
+}
 eight={
-    { 0,-1},
-    { 1,-1},
-    { 1, 0},
-    { 1, 1},
-    { 0, 1},
-    {-1, 1},
-    {-1, 0},
-    {-1,-1}
-   }
+ { 0,-1},
+ { 1,-1},
+ { 1, 0},
+ { 1, 1},
+ { 0, 1},
+ {-1, 1},
+ {-1, 0},
+ {-1,-1}
+}
 function center(str,y,c)
  if (c) color(c)
  print(str,64-#str/2,y)
@@ -490,10 +485,10 @@ function contains(t,e)
 end
 
 function round(x)
-  if x%2 ~= 0.5 then
-    return flr(x+0.5)
-  end
-  return x-0.5
+ if x%2 ~= 0.5 then
+  return flr(x+0.5)
+ end
+ return x-0.5
 end
 -->8
 -- mob
