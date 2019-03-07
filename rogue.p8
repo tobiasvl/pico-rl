@@ -33,15 +33,23 @@ function _init()
   move=function(self,move)
    local x=self.x+dirs[move][1]
    local y=self.y+dirs[move][2]
-   if x>0 and x<=dungeon._width and y>0 and y<=dungeon._height and dungeon.map[x][y]!=1 then
-    self.x,self.y=x,y
+   if iswalkable(x,y,"corridor") then
+    local move=true
+    for m in all(mobs) do
+     if m.x==x and m.y==y then
+      move=false
+      attack(player,m)
+     end
+    end
+    if (move) self.x,self.y=x,y
    end
   end
  }
  add(mobs,player)
 
  generate_dungeon=gendun_rogue
- dungeon=generate_dungeon(50,50,4,4)
+ dungeon=generate_dungeon(25*level,25*level,3*level,3*level)
+ --dungeon=generate_dungeon(20,20,2,2)
  fogmap=generate_fogmap(dungeon.map)
 
  --generate dummy mobs
@@ -70,12 +78,17 @@ function _init()
   {0,0},
   {0,1},
   {-1,1},
-  {1,1}}
- end
- -->8
- --generate dungeon
+  {1,1},
+  {0,0},
+  {0,0},
+  {0,0},
+  {0,0},
+  {0,0}}
+end
+-->8
+--generate dungeon
 
- function gendun_rogue(w, h, gw, gh)
+function gendun_rogue(w, h, gw, gh)
  -- https://web.archive.org/web/20130510010345/http://kuoi.com/~kamikaze/gamedesign/art07_rogue_dungeon.php
  local map={}
  local grid={}
@@ -343,7 +356,7 @@ end
 --draw
 function _draw()
  draw()
- print(sub(tostr(seed,true),3),0,0,3)
+ --print(sub(tostr(seed,true),3),0,0,3)
 end
 
 function title_draw()
@@ -378,41 +391,50 @@ function game_draw()
  --[[
  for coords,item in pairs(dungeon) do
  print(item,coords[1]*w+cam.x,coords[2]*h+cam.y,6)
-end
-]]
+ end
+ ]]
 
-fogdungeon()
-unfogroom(coords_to_room(player.x,player.y))
+ fogdungeon()
+ unfogroom(coords_to_room(player.x,player.y))
 
-for x=1,dungeon._width do
- for y=1,dungeon._height do
-  local c=6
-  if fogmap[x][y]==2 then
-   c=5
-  end
-  if fogmap[x][y]==1 or fogmap[x][y]==2 then
-   local parts={"█","▒","▤"}
-   local part=parts[dungeon.map[x][y]]
-   if part then
-    print(part,x*w+cam.x,y*h+cam.y,c)
-   else
-    if (fogmap[x][y]==1) print(".",x*w+cam.x+2,y*h+cam.y-2,5)
+ for x=1,dungeon._width do
+  for y=1,dungeon._height do
+   local c=6
+   if fogmap[x][y]==2 then
+    c=5
+   end
+   if fogmap[x][y]==1 or fogmap[x][y]==2 then
+    local parts={"█","▒","▤"}
+    local part=parts[dungeon.map[x][y]]
+    if part then
+     print(part,x*w+cam.x,y*h+cam.y,c)
+    else
+     if (fogmap[x][y]==1) print(".",x*w+cam.x+2,y*h+cam.y-2,5)
+    end
    end
   end
  end
-end
 
---for d in all(dungeon._doors) do
--- print("++",d.x*w+cam.x,d.y*h+cam.y)
---end
+ --for d in all(dungeon._doors) do
+ -- print("++",d.x*w+cam.x,d.y*h+cam.y)
+ --end
 
-for m in all(mobs) do
- if fogmap[m.x][m.y]==1 then
-  print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
+ for m in all(mobs) do
+  if fogmap[m.x][m.y]==1 then
+   --if coords_to_room(m.x,m.y)==coords_to_room(player.x,player.y) then
+   -- local dmap=dijkstra(player.x,player.y,m.x,m.y)
+   -- for x=1,#dmap do
+   --  for y=1,#dmap[1] do
+   --   if (dmap[x][y].value<99) print(dmap[x][y].value,x*w+cam.x,y*h+cam.y,2)
+   --  end
+   -- end
+   --end
+   print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
+  end
  end
-end
 
-drawhud()
+ drawhud()
+ print(stat(1),0,0)
 end
 
 function drawhud()
@@ -439,6 +461,66 @@ function drawhud()
 end
 -->8
 --tools
+
+function iswalkable(x,y,check)
+ if y<1 or y>#dungeon.map or x<1 or x>#dungeon.map[1] then
+  return false
+ end
+ if dungeon.map[x][y]==0 then
+  return true
+ elseif check=="corridor" and dungeon.map[x][y]==2 then
+  return true
+ else
+  return false
+ end
+end
+
+function dijkstra(fx,fy,tx,ty)
+ local dmap={}
+ local unvisited={}
+ local t
+ local room=coords_to_room(fx,fy)
+ if (not room or room!=coords_to_room(tx,ty)) return nil
+ for x=room.start_x,room.end_x do
+  for y=room.start_y,room.end_y do
+   dmap[x..","..y]=add(unvisited,{x=x,y=y,value=99,visited=false})
+  end
+ end
+
+ printh(#dmap)
+ printh(fx)
+ printh(fy)
+ printh(room.start_x)
+ printh(room.start_y)
+ t=dmap[fx..","..fy]
+ t.value=0
+
+ while not dmap[tx..","..ty].visited do
+  printh(#unvisited)
+  printh(t.x)
+  if (#unvisited==0) return nil
+  for dir in all(four) do --eight?
+   local nx=t.x+dir[1]
+   local ny=t.y+dir[2]
+   if iswalkable(nx,ny) and nx>room.start_x and nx<room.end_x and ny>room.start_y and ny<room.end_y then
+    local n=dmap[nx..","..ny]
+    n.value=min(t.value+1,n.value)
+   end
+  end
+  t.visited=true
+  del(unvisited,t)
+
+  local minimum=99
+  for n in all(unvisited) do
+   if n.value<minimum then
+    t=n
+    minimum=n.value
+   end
+  end
+  if (minimum==99) break
+ end
+ return dmap
+end
 
 function getrandomint(min, max)
  min=min and min or 0
@@ -497,13 +579,26 @@ mob={
  col=8,
  hp=0,
  move=function(self)
-  local f={1,2,4,5,6,8,9,10}
-  r=ceil(rnd(#f))
-  local m=dirs[f[r]]
-  x=self.x+m[1]
-  y=self.y+m[2]
-  if x>0 and x<=dungeon._width and y>0 and y<=dungeon._height and dungeon.map[x][y]!=1 then
-   self.x,self.y=x,y
+  local room=coords_to_room(self.x,self.y)
+  if (room!=coords_to_room(player.x,player.y)) return
+  local dmap=dijkstra(player.x,player.y,self.x,self.y)
+  local minimum=99
+  local cells={}
+  for dir in all(four) do
+   local nx,ny=self.x+dir[1],self.y+dir[2]
+   local n=dmap[nx..","..ny]
+   if n and n.value<minimum then
+    add(cells,n)
+    minimum=n.value
+   end
+  end
+  local n=cells[#cells]
+  if n then
+   if n.value==0 then
+    attack(m,player)
+   else
+    self.x,self.y=n.x,n.y
+   end
   end
  end,
  new=function(self,o)
@@ -513,6 +608,11 @@ mob={
   return setmetatable(o or {},self)
  end
 }
+
+function attack(attacker,defender)
+ defender.hp-=1
+ if (defender.hp==0) del(mobs,defender)
+end
 __map__
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
