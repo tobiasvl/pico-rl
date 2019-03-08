@@ -19,12 +19,14 @@ function _init()
  level=1
  gold=0
  radio=0
+ log={}
 
  seed=rnd(-1)
  srand(seed)
 
  mobs={}
  player=mob:new{
+  name="you",
   c="웃",
   col=9,
   hp=5,
@@ -38,7 +40,7 @@ function _init()
     for m in all(mobs) do
      if m.x==x and m.y==y then
       move=false
-      attack(player,m)
+      attack(self,m)
      end
     end
     if (move) self.x,self.y=x,y
@@ -46,6 +48,9 @@ function _init()
   end
  }
  add(mobs,player)
+
+ add(log,"you enter level "..level.." of the tomb")
+ add(log,"the walls emanate radioactivity")
 
  generate_dungeon=gendun_rogue
  dungeon=generate_dungeon(25*level,25*level,3*level,3*level)
@@ -58,12 +63,7 @@ function _init()
   repeat
    x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
   until dungeon.map[x][y]==0
-  add(mobs,mob:new({
-   c="😐",
-   hp=1,
-   x=x,
-   y=y
-  }))
+  add(mobs,tomb_bot:new{x=x,y=y})
  end
 
  cam={x=-player.x*w+64,y=-player.y*h+60}
@@ -340,7 +340,7 @@ function game_update()
  local move=btnp()
  if move>0 and move<15 then
   t+=1
-  radio+=0.05
+  radio+=0.5
   for m in all(mobs) do
    m:move(move)
   end
@@ -415,26 +415,22 @@ function game_draw()
   end
  end
 
- --for d in all(dungeon._doors) do
- -- print("++",d.x*w+cam.x,d.y*h+cam.y)
- --end
-
  for m in all(mobs) do
   if fogmap[m.x][m.y]==1 then
-   --if coords_to_room(m.x,m.y)==coords_to_room(player.x,player.y) then
-   -- local dmap=dijkstra(player.x,player.y,m.x,m.y)
-   -- for x=1,#dmap do
-   --  for y=1,#dmap[1] do
-   --   if (dmap[x][y].value<99) print(dmap[x][y].value,x*w+cam.x,y*h+cam.y,2)
-   --  end
-   -- end
-   --end
+   rectfill(m.x*w-1+cam.x,m.y*h-1+cam.y,m.x*w-1+w+cam.x,m.y*h-1+h+cam.y,m.bg)
    print(m.c,m.x*w+cam.x,m.y*h+cam.y,m.col)
   end
  end
 
+ drawlog()
  drawhud()
- print(stat(1),0,0)
+ --print(stat(1),0,0)
+end
+
+function drawlog()
+ rectfill(0,0,128,h*2-1,0)
+ print(#log>1 and log[#log-1] or "",0,0,7)
+ print(#log>0 and log[#log] or "",0,h,7)
 end
 
 function drawhud()
@@ -487,22 +483,15 @@ function dijkstra(fx,fy,tx,ty)
   end
  end
 
- printh(#dmap)
- printh(fx)
- printh(fy)
- printh(room.start_x)
- printh(room.start_y)
  t=dmap[fx..","..fy]
  t.value=0
 
  while not dmap[tx..","..ty].visited do
-  printh(#unvisited)
-  printh(t.x)
   if (#unvisited==0) return nil
   for dir in all(four) do --eight?
    local nx=t.x+dir[1]
    local ny=t.y+dir[2]
-   if iswalkable(nx,ny) and nx>room.start_x and nx<room.end_x and ny>room.start_y and ny<room.end_y then
+   if iswalkable(nx,ny) and nx>=room.start_x and nx<=room.end_x and ny>=room.start_y and ny<=room.end_y then
     local n=dmap[nx..","..ny]
     n.value=min(t.value+1,n.value)
    end
@@ -577,6 +566,7 @@ end
 mob={
  c="",
  col=8,
+ bg=0,
  hp=0,
  move=function(self)
   local room=coords_to_room(self.x,self.y)
@@ -595,7 +585,7 @@ mob={
   local n=cells[#cells]
   if n then
    if n.value==0 then
-    attack(m,player)
+    attack(self,player)
    else
     self.x,self.y=n.x,n.y
    end
@@ -609,9 +599,58 @@ mob={
  end
 }
 
+base_mob=mob:new({
+ name="mob",
+ c="😐",
+ hp=1,
+})
+
+tomb_bot=base_mob:new({
+ name="tomb bot",
+ col=7,
+ bg=8,
+ hp=5,
+ str=5,
+ arm=5,
+})
+
+eye=mob:new({
+ name="eye",
+ c="☉",
+ col=8,
+ hp=5,
+ str=5,
+ arm=5,
+})
+
+cat=mob:new({
+ c="🐱",
+ col=8,
+ hp=5,
+ str=5,
+ arm=5,
+})
+
+bat=mob:new({
+ c="ˇ",
+ col=8,
+ hp=5,
+ str=5,
+ arm=5,
+})
+
 function attack(attacker,defender)
- defender.hp-=1
- if (defender.hp==0) del(mobs,defender)
+ local dmg=1
+ defender.hp-=dmg
+ add(log,attacker.name.." hit "..defender.name.." for "..dmg.." damage")
+ if defender.hp==0 then
+  del(mobs,defender)
+  add(log,defender.name.." died")
+ end
+ local ff=f
+ for _=ff,ff+1000 do
+
+ end
 end
 __map__
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
