@@ -5,68 +5,8 @@ __lua__
 function _init()
  poke(0x5f2d,1)
 
- --draw=title_draw
- --update=title_update
-
- draw=game_draw
- update=game_update
-
- t=0
- f=0
- w,h=8,6
-
- name=nil
- level=1
- gold=0
- radio=0
- log={}
-
- seed=rnd(-1)
- srand(seed)
-
- mobs={}
- player=mob:new{
-  name="you",
-  c="웃",
-  col=9,
-  hp=5,
-  str=5,
-  arm=5,
-  move=function(self,move)
-   local x=self.x+dirs[move][1]
-   local y=self.y+dirs[move][2]
-   if iswalkable(x,y,"corridor") then
-    local move=true
-    for m in all(mobs) do
-     if m.x==x and m.y==y then
-      move=false
-      attack(self,m)
-     end
-    end
-    if (move) self.x,self.y=x,y
-   end
-  end
- }
- add(mobs,player)
-
- add(log,"you enter level "..level.." of the tomb")
- add(log,"the walls emanate radioactivity")
-
- generate_dungeon=gendun_rogue
- dungeon=generate_dungeon(25*level,25*level,3*level,3*level)
- --dungeon=generate_dungeon(20,20,2,2)
- fogmap=generate_fogmap(dungeon.map)
-
- --generate dummy mobs
- for _=1,7 do
-  local x,y
-  repeat
-   x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
-  until dungeon.map[x][y]==0
-  add(mobs,tomb_bot:new{x=x,y=y})
- end
-
- cam={x=-player.x*w+64,y=-player.y*h+60}
+ draw=title_draw
+ update=title_update
 
  dirs={
   {-1,0},
@@ -84,6 +24,71 @@ function _init()
   {0,0},
   {0,0},
   {0,0}}
+
+ w,h=8,6
+ f=0
+end
+
+function init_game()
+ t=0
+ level=0
+ name=nil
+ gold=0
+ radio=0
+ log={}
+
+ seed=rnd(-1)
+ srand(seed)
+
+ player=mob:new{
+  name="you",
+  c="웃",
+  col=7,
+  hp=5,
+  str=1,
+  arm=1,
+  move=function(self,move)
+   local nx,ny=self.x+dirs[move][1],self.y+dirs[move][2]
+   if iswalkable(nx,ny,"corridor") then
+    local mve=true
+    for m in all(mobs) do
+     if m!=player and m.x==nx and m.y==ny then
+      mve=false
+      attack(self,m)
+     end
+    end
+    if (mve) self.x,self.y=nx,ny
+    if (coords_to_room(nx,ny)==dungeon.goal and dungeon.map[nx][ny]==3) init_level()
+   end
+  end
+ }
+
+ init_level()
+end
+
+function init_level()
+ level+=1
+
+ add(log,"you enter level "..level.." of the tomb")
+ add(log,"the walls emanate radioactivity")
+
+ mobs={}
+ add(mobs,player)
+
+ generate_dungeon=gendun_rogue
+ dungeon=generate_dungeon(25*level,25*level,3*level,3*level)
+ fogmap=generate_fogmap(dungeon.map)
+
+ --generate dummy mobs
+ for _=1,7 do
+  local x,y
+  repeat
+   x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
+  until dungeon.map[x][y]==0 and coords_to_room(x,y)!=dungeon.start
+  add(mobs,base_mob:new{x=x,y=y})
+ end
+
+ cam={x=-player.x*w+64,y=-player.y*h+60}
 end
 -->8
 --generate dungeon
@@ -209,21 +214,9 @@ function gendun_rogue(w, h, gw, gh)
    for n in all(room.connected_neighbors) do
     local start={x=room.start_x+flr((room.end_x-room.start_x)/2),y=room.start_y+flr((room.end_y-room.start_y)/2)}
     local goal={x=n.start_x+flr((n.end_x-n.start_x)/2),y=n.start_y+flr((n.end_y-n.start_y)/2)}
-    --start={x=flr(rnd(room.end_x-room.start_x))+room.start_x+1,y=flr(rnd(room.end_y-room.start_y))+room.start_y+1}
-    --goal={x=flr(rnd(n.end_x-n.start_x))+n.start_x+1,y=flr(rnd(n.end_y-n.start_y))+n.start_y+1}
     local dir_x=sgn(goal.x-start.x)
     local dir_y=sgn(goal.y-start.y)
 
-    --local yy=start.y
-    --for xx=start.x,goal.x,dir_x do
-    --  if (map[xx][yy]==1) map[xx][yy]=2
-    --  map[xx][yy]=2
-    --end
-    --local xx=start.x
-    --for yy=start.y,goal.y,dir_y do
-    --  if (map[xx][yy]==1) map[xx][yy]=2
-    --  map[xx][yy]=2
-    --end
     -- change to pathfinding
     for xx=start.x,goal.x,dir_x do
      for yy=start.y,goal.y,dir_y do
@@ -246,8 +239,15 @@ function gendun_rogue(w, h, gw, gh)
   player.y=y
  end
  do
-  local x=flr(rnd(goal.end_x-goal.start_x)+goal.start_x)+1
-  local y=flr(rnd(goal.end_y-goal.start_y)+goal.start_y)+1
+  local x,y
+  ::place_stairs::
+  x=flr(rnd(goal.end_x-goal.start_x)+goal.start_x)+1
+  y=flr(rnd(goal.end_y-goal.start_y)+goal.start_y)+1
+  for dir in all(eight) do --four?
+   local nx=x+dir[1]
+   local ny=y+dir[2]
+   if (map[nx][ny]==2) goto place_stairs
+  end
   map[x][y]=3
  end
 
@@ -259,6 +259,7 @@ function gendun_rogue(w, h, gw, gh)
  dungeon.rooms=rooms
  --dungeon._doors={}
  dungeon.start=start
+ dungeon.goal=goal
  return dungeon
 end
 
@@ -291,6 +292,13 @@ function unfogroom(room)
   end
   return
  end
+ if blind then
+  for dir in all(dirs) do --eight or four?
+   local x,y=player.x+dir[1],player.y+dir[2]
+   fogmap[x][y]=1
+  end
+  return
+ end
  for x=room.start_x-1,room.end_x+1 do
   for y=room.start_y-1,room.end_y+1 do
    fogmap[x][y]=1
@@ -301,7 +309,9 @@ end
 function fogdungeon()
  for x=1,#dungeon.map do
   for y=1,#dungeon.map[1] do
-   if fogmap[x][y]==1 then
+   if amnesia then
+    fogmap[x][y]=0
+   elseif fogmap[x][y]==1 then
     fogmap[x][y]=2
    end
   end
@@ -317,21 +327,9 @@ end
 function title_update()
  if f>=30 then
   if btnp(❎) and not name then
-   name=""
-  elseif name then
-   if stat(30) then
-    local str=stat(31)
-    if str=="\b" then
-     name=sub(name,1,-2)
-    elseif str=="\r" then
-     poke(0x5f30,1)
-     update=game_update
-     draw=game_draw
-    elseif str!="\t" then
-     if (str=="p") poke(0x5f30,1)
-     if (#name<=23) name=name..str
-    end
-   end
+   init_game()
+   update=game_update
+   draw=game_draw
   end
  end
 end
@@ -340,9 +338,12 @@ function game_update()
  local move=btnp()
  if move>0 and move<15 then
   t+=1
-  radio+=0.5
-  for m in all(mobs) do
-   m:move(move)
+  radio+=0.7*(level+0.5)
+  player:move(move)
+  for _=1,limp and 2 or 1 do
+   for m in all(mobs) do
+    if (m!=player) m:move()
+   end
   end
  end
 
@@ -350,7 +351,14 @@ function game_update()
  if (player.x+cam.x/w>13) cam.x-=w
  if (player.x+cam.x/w<2) cam.x+=w
  if (player.y+cam.y/h>16) cam.y-=h
- if (player.y+cam.y/h<2) cam.y+=h
+ if (player.y+cam.y/h<3) cam.y+=h
+end
+
+function game_over_update()
+ if btnp(5) then
+  update=title_update
+  draw=title_draw
+ end
 end
 -->8
 --draw
@@ -362,23 +370,23 @@ end
 function title_draw()
  cls()
  for i=0,min(f/10,3) do
-  print("pirogue",64-(5*4)/2+i,i,8)
+  print("pico-@",64-(6*4)/2-4+i,i,8)
  end
  if f>=30 then
-  print("pirogue",64-(5*4)/2+3,3,10)
+  print("pico-@",64-(6*4)/2,3,10)
   print("☉☉",30,20,11)
   print("☉☉",20,40,11)
   print("☉☉",40,35,11)
   print("∧ ∧",70,20,10)
   print([[   _
   | |
-  /___\]],67,26,12)
+ /___\]],67,26,12)
   print("◆",77,25,8)
-  print("웃",77,32,9)
+  print("웃",77,32,7)
  end
 
  if f>=30 and not name then
-  center("press ❎",64,5)
+  print("press ❎",64-(8*4)/2,64,5)
  elseif name then
   center("name:",64,5)
   print(name.."_",25,72,7)
@@ -387,12 +395,6 @@ end
 
 function game_draw()
  cls()
-
- --[[
- for coords,item in pairs(dungeon) do
- print(item,coords[1]*w+cam.x,coords[2]*h+cam.y,6)
- end
- ]]
 
  fogdungeon()
  unfogroom(coords_to_room(player.x,player.y))
@@ -455,6 +457,12 @@ function drawhud()
  local t_hud="⧗"..t
  print(t_hud,128-#t_hud*4-4,128-h,7)
 end
+
+function game_over_draw()
+ cls()
+ print("you were killed by "..cause)
+ print("press ❎",64-(8*4)/2,64,5)
+end
 -->8
 --tools
 
@@ -462,7 +470,12 @@ function iswalkable(x,y,check)
  if y<1 or y>#dungeon.map or x<1 or x>#dungeon.map[1] then
   return false
  end
- if dungeon.map[x][y]==0 then
+ --for m in all(mobs) do
+ -- if m!=player and x==m.x and y==m.y then
+ --  return false
+ -- end
+ --end
+ if dungeon.map[x][y]==0 or dungeon.map[x][y]==3 then
   return true
  elseif check=="corridor" and dungeon.map[x][y]==2 then
   return true
@@ -476,7 +489,8 @@ function dijkstra(fx,fy,tx,ty)
  local unvisited={}
  local t
  local room=coords_to_room(fx,fy)
- if (not room or room!=coords_to_room(tx,ty)) return nil
+ if (not room) return nil
+ if (room!=coords_to_room(tx,ty)) return nil
  for x=room.start_x,room.end_x do
   for y=room.start_y,room.end_y do
    dmap[x..","..y]=add(unvisited,{x=x,y=y,value=99,visited=false})
@@ -491,7 +505,7 @@ function dijkstra(fx,fy,tx,ty)
   for dir in all(four) do --eight?
    local nx=t.x+dir[1]
    local ny=t.y+dir[2]
-   if iswalkable(nx,ny) and nx>=room.start_x and nx<=room.end_x and ny>=room.start_y and ny<=room.end_y then
+   if iswalkable(nx,ny,"corridor") and nx>=room.start_x and nx<=room.end_x and ny>=room.start_y and ny<=room.end_y then
     local n=dmap[nx..","..ny]
     n.value=min(t.value+1,n.value)
    end
@@ -524,6 +538,7 @@ function shuffle(t)
  end
  return t
 end
+
 four={
  { 0,-1},
  { 1, 0},
@@ -569,9 +584,8 @@ mob={
  bg=0,
  hp=0,
  move=function(self)
-  local room=coords_to_room(self.x,self.y)
-  if (room!=coords_to_room(player.x,player.y)) return
   local dmap=dijkstra(player.x,player.y,self.x,self.y)
+  if (not dmap) return
   local minimum=99
   local cells={}
   for dir in all(four) do
@@ -603,6 +617,8 @@ base_mob=mob:new({
  name="mob",
  c="😐",
  hp=1,
+ str=1,
+ arm=1
 })
 
 tomb_bot=base_mob:new({
@@ -640,16 +656,18 @@ bat=mob:new({
 })
 
 function attack(attacker,defender)
- local dmg=1
+ if (attacker==defender) return
+ local dmg=attacker.str
  defender.hp-=dmg
  add(log,attacker.name.." hit "..defender.name.." for "..dmg.." damage")
  if defender.hp==0 then
   del(mobs,defender)
   add(log,defender.name.." died")
- end
- local ff=f
- for _=ff,ff+1000 do
-
+  if defender==player then
+   cause=attacker.name
+   update=game_over_update
+   draw=game_over_draw
+  end
  end
 end
 __map__
