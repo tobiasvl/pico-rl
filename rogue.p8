@@ -3,7 +3,7 @@ version 16
 __lua__
 --init
 function _init()
- poke(0x5f2d,1)
+ --poke(0x5f2d,1)
 
  draw=title_draw
  update=title_update
@@ -23,7 +23,10 @@ function _init()
   {0,0},
   {0,0},
   {0,0},
-  {0,0}}
+  {0,0},
+  [0x20]={0,0},
+ }
+ setmetatable(dirs,dirs)
 
  w,h=8,6
  f=0
@@ -55,11 +58,22 @@ function init_game()
      if m!=player and m.x==nx and m.y==ny then
       mve=false
       attack(self,m)
+      break
      end
     end
     if (mve) self.x,self.y=nx,ny
     if (coords_to_room(nx,ny)==dungeon.goal and dungeon.map[nx][ny]==3) init_level()
+    for b in all(balls) do
+     if b.x==nx and b.y==ny then
+      heal()
+      del(balls,b)
+      break
+     end
+    end
+   else
+    return false
    end
+   return true
   end
  }
 
@@ -86,6 +100,16 @@ function init_level()
    x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
   until dungeon.map[x][y]==0 and coords_to_room(x,y)!=dungeon.start
   add(mobs,base_mob:new{x=x,y=y})
+ end
+
+ --generate dummy balls
+ balls={}
+ for _=1,7 do
+  local x,y
+  repeat
+   x,y=ceil(rnd(dungeon._width)),ceil(rnd(dungeon._height))
+  until dungeon.map[x][y]==0
+  add(balls,{x=x,y=y})
  end
 
  cam={x=-player.x*w+64,y=-player.y*h+60}
@@ -336,14 +360,57 @@ end
 
 function game_update()
  local move=btnp()
- if move>0 and move<15 then
+ if move>0 and move<15 or move==0x20 then
+  if not player:move(move) and move!=0x20 then
+   return
+  end
   t+=1
   radio+=0.7*(level+0.5)
-  player:move(move)
   for _=1,limp and 2 or 1 do
    for m in all(mobs) do
     if (m!=player) m:move()
    end
+  end
+
+  local ailments={
+   function()
+    if not limp then
+     limp=true
+     add(log,"you start to limp")
+    end
+   end,
+   function()
+    if not blind then
+     blind=true
+     add(log,"your eyesight worsens")
+    end
+   end,
+   function()
+    if not amnesia then
+     amnesia=true
+     add(log,"you feel forgetful")
+    end
+   end,
+   function()
+    player.str=max(0,player.str-1)
+    add(log,"your muscles are fatigued")
+   end,
+   function()
+    player.arm=max(0,player.arm-1)
+    add(log,"your skin sloughs off")
+   end,
+   function()
+    player.hp-=1
+    add(log,"you bleed from an orifice")
+    if player.hp==0 then
+     cause="radioactivity"
+     update=game_over_update
+     draw=game_over_draw
+    end
+   end
+  }
+  if radio==128 or (radio>=128 and flr(rnd(30))==0) then
+   ailments[ceil(rnd(#ailments))]()
   end
  end
 
@@ -359,6 +426,15 @@ function game_over_update()
   update=title_update
   draw=title_draw
  end
+end
+
+function heal()
+ radio=0
+ blind=false
+ limp=false
+ amnesia=false
+ player.hp=player.max_hp
+ add(log,"you're no longer in any pain")
 end
 -->8
 --draw
@@ -414,6 +490,12 @@ function game_draw()
      if (fogmap[x][y]==1) print(".",x*w+cam.x+2,y*h+cam.y-2,5)
     end
    end
+  end
+ end
+
+ for b in all(balls) do
+  if fogmap[b.x][b.y]==1 then
+   print("●",b.x*w+cam.x,b.y*h+cam.y,12)
   end
  end
 
@@ -592,11 +674,13 @@ mob={
    local nx,ny=self.x+dir[1],self.y+dir[2]
    local n=dmap[nx..","..ny]
    if n and n.value<minimum then
-    add(cells,n)
+    cells={n}
     minimum=n.value
+   elseif n and n.value==minimum then
+    add(cells,n)
    end
   end
-  local n=cells[#cells]
+  local n=shuffle(cells)[#cells]
   if n then
    if n.value==0 then
     attack(self,player)
